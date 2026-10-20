@@ -4,17 +4,12 @@ from langchain.tools import tool
 from typing import Dict, Any
 import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-)
-
 load_dotenv()
 
 tavily_client = TavilyClient()
 
 @tool
 def web_search(query: str) -> Dict[str, Any]:
-    """tool to search the web for information"""
+    """Search the web for recipes. Include the main ingredients in the query."""
     logging.info(f"searching for {query}")
-    return tavily_client.search(query)
+    return tavily_client.search(query, max_results=5)
