@@ -9,7 +9,7 @@ Comes as a **web app** (React + FastAPI) and a **command-line** version.
 3. The agent searches the web (Tavily) for a matching recipe and shows what you have and what's missing, with substitutes.
 4. Ask follow-ups like "make it vegan" — the chef proposes changes you can apply to the recipe.
 
-HEIC and large photos are converted/shrunk automatically with macOS `sips`.
+HEIC and large photos are converted/shrunk automatically with Pillow.
 
 ## Project layout
 | File | What it does |
@@ -44,6 +44,24 @@ Or build once and serve everything from FastAPI:
 ```bash
 cd frontend && npm run build && cd ..
 uv run uvicorn server:app --port 8000            # → http://localhost:8000
+```
+
+## Deploy to Render (free)
+The repo includes a `Dockerfile` (builds the React app, then runs FastAPI) and a `render.yaml` blueprint.
+1. Sign in at [render.com](https://render.com) with GitHub.
+2. **New → Blueprint**, pick this repo.
+3. Enter `ANTHROPIC_API_KEY` and `TAVILY_API_KEY` when asked (paste the raw key, no quotes).
+4. Deploy. Every push to `main` redeploys.
+
+The free plan sleeps after 15 minutes idle (first visit then takes ~1 minute) and chat memory resets on restart.
+To protect your API bill, the server limits each visitor to 30 requests/hour and everyone to 300/day
+(change with the `RATE_LIMIT_PER_HOUR` / `RATE_LIMIT_PER_DAY` env vars). Also set a monthly spend limit in the Anthropic Console.
+
+Test the production build locally with Docker:
+```bash
+docker build -t fasteat .
+set -a; source .env; set +a
+docker run -p 10000:10000 -e PORT=10000 -e ANTHROPIC_API_KEY -e TAVILY_API_KEY fasteat
 ```
 
 ## Run the command-line version

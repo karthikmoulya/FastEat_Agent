@@ -1,12 +1,15 @@
 import base64
-import mimetypes
+import io
 import subprocess
-import tempfile
 from pathlib import Path
+from PIL import Image, ImageOps, UnidentifiedImageError
+from pillow_heif import register_heif_opener
 from langchain.messages import HumanMessage
 
+register_heif_opener()  # lets Pillow open iPhone HEIC photos
+
 # Claude accepts these image types, up to ~5MB per image (base64-encoded)
-SUPPORTED_MIME_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+SUPPORTED_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "GIF": "image/gif", "WEBP": "image/webp"}
 MAX_IMAGE_BYTES = 3_500_000  # raw bytes; base64 adds ~33%, keeping us under 5MB
 MAX_DIMENSION = 1568  # larger images get downscaled by the API anyway
 
@@ -27,32 +30,28 @@ def choose_image_file() -> Path:
 
 
 def prepare_image(image_path: Path) -> tuple[bytes, str]:
-    """Return (bytes, mime_type), converting/shrinking with macOS `sips` when needed
+    """Return (bytes, mime_type), converting to a resized JPEG when needed
     (e.g. iPhone HEIC photos or images over the size limit)."""
     image_path = image_path.expanduser().resolve()
 
     if not image_path.is_file():
         raise FileNotFoundError(f"Image not found: {image_path}")
 
-    mime_type, _ = mimetypes.guess_type(str(image_path))
-    if not mime_type or not mime_type.startswith("image/"):
-        raise ValueError(f"Not an image file: {image_path}")
-
     data = image_path.read_bytes()
-    if mime_type in SUPPORTED_MIME_TYPES and len(data) <= MAX_IMAGE_BYTES:
+    try:
+        image = Image.open(io.BytesIO(data))
+    except UnidentifiedImageError:
+        raise ValueError(f"Not an image file: {image_path.name}")
+
+    mime_type = SUPPORTED_FORMATS.get(image.format)
+    if mime_type and len(data) <= MAX_IMAGE_BYTES:
         return data, mime_type
 
-    with tempfile.TemporaryDirectory() as tmp:
-        out_path = Path(tmp) / "image.jpg"
-        result = subprocess.run(
-            ["sips", "-s", "format", "jpeg", "-s", "formatOptions", "80",
-             "-Z", str(MAX_DIMENSION), str(image_path), "--out", str(out_path)],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0 or not out_path.is_file():
-            raise ValueError(f"Could not convert image {image_path}: {result.stderr.strip()}")
-        return out_path.read_bytes(), "image/jpeg"
+    image = ImageOps.exif_transpose(image)  # keep phone photos the right way up
+    image.thumbnail((MAX_DIMENSION, MAX_DIMENSION))
+    out = io.BytesIO()
+    image.convert("RGB").save(out, format="JPEG", quality=80)
+    return out.getvalue(), "image/jpeg"
 
 
 def build_image_message(image_path: Path, prompt) -> HumanMessage:

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: fasteat
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # set these in the Render dashboard; sync: false keeps them out of this file
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: RATE_LIMIT_PER_HOUR
+        value: "30"
+      - key: RATE_LIMIT_PER_DAY
+        value: "300"
